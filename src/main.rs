@@ -46,6 +46,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 pub fn dispatch(csv: CsvData, task: Task) -> CsvData {
     println!("{:?}\n{:?}", csv, task);
     match task {
-        Task::SumDuration { column: col } => sum_duration(csv, col),
+        Task::SumDuration { column: col } => sum_duration(csv, col).expect("failed"),
     }
 }

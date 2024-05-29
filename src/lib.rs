@@ -1,3 +1,4 @@
+use regex::Regex;
 use csv::Reader;
 use std::collections::HashMap;
 use std::error::Error;
@@ -28,6 +29,16 @@ pub fn parse_csv(path: String) -> Result<CsvData, Box<dyn Error>> {
     Ok(CsvData { rows: lines })
 }
 
-pub fn sum_duration(csv: CsvData, _col: String) -> CsvData {
-    csv
+pub fn sum_duration(csv: CsvData, col: String) -> Option<CsvData> {
+    let pattern = Regex::new("([0-9]+):([0-9]+)").ok()?;
+    for row in &csv.rows {
+        if !row.contains_key(&col) {
+            eprintln!("missing column {col} in row {row:?}");
+            return None;
+        }
+        let val = row.get(&col)?;
+        let caps: Vec<_> = pattern.captures_iter(val).map(|c| c.extract::<2>()).collect();
+        println!("{:?}", caps);
+    }
+    Some(csv)
 }
