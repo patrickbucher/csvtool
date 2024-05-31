@@ -29,23 +29,37 @@ pub fn parse_csv(path: String) -> Result<CsvData, Box<dyn Error>> {
     Ok(CsvData { rows: lines })
 }
 
-pub fn sum_duration(csv: CsvData, col: String) -> Option<CsvData> {
+pub fn sum_duration(csv: CsvData, sum_col: String) -> Option<CsvData> {
     let parser = DurationParser::new();
     let mut total_mins: usize = 0;
+    let mut result = CsvData { rows: Vec::new() };
     for row in &csv.rows {
-        if !row.contains_key(&col) {
-            eprintln!("missing column {col} in row {row:?}");
+        if !row.contains_key(&sum_col) {
+            // TODO: report with Result Err
+            eprintln!("missing column {sum_col} in row {row:?}");
             return None;
         }
-        let raw = row.get(&col)?;
+        let raw = row.get(&sum_col)?;
         if let Some((h, m)) = parser.parse_duration(raw) {
             total_mins += m + h * 60;
         }
+        result.rows.push(row.clone());
     }
     let h = total_mins / 60;
     let m = total_mins - h * 60;
-    println!("{h}:{m}");
-    Some(csv)
+    let cols = csv.rows.get(0)?.keys();
+    let mut sum_row: HashMap<String, String> = HashMap::new();
+    for col in cols {
+        sum_row.insert(
+            String::from(col),
+            match *col == sum_col {
+                true => format!("{h}:{m:2}"),
+                false => String::from(""),
+            },
+        );
+    }
+    result.rows.push(sum_row);
+    Some(result)
 }
 
 struct DurationParser {

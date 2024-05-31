@@ -39,12 +39,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let cli = Args::parse();
     let data = parse_csv(cli.file)?;
     let task: Task = cli.command.into();
-    dispatch(data, task);
+    let result = dispatch(data, task);
+    println!("{:?}", result);
     Ok(())
 }
 
 pub fn dispatch(csv: CsvData, task: Task) -> CsvData {
-    println!("{:?}\n{:?}", csv, task);
     match task {
         Task::SumDuration { column: col } => sum_duration(csv, col).expect("failed"),
     }
