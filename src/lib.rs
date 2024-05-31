@@ -29,6 +29,8 @@ pub fn parse_csv(path: String) -> Result<CsvData, Box<dyn Error>> {
     Ok(CsvData { rows: lines })
 }
 
+// TODO: re-consider parsing into data structure, becuase HashMap doesn't maintain the column
+// order. Consider using reader/writer with on-the-fly processing.
 pub fn sum_duration(csv: CsvData, sum_col: String) -> Option<CsvData> {
     let parser = DurationParser::new();
     let mut total_mins: usize = 0;
