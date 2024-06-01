@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
-use csvtool::{parse_csv, sum_duration, CsvData};
+use csvtool::Task;
 use std::error::Error;
+use std::path::PathBuf;
 
 /// Operations on CSV files.
 #[derive(Parser)]
@@ -8,9 +9,6 @@ use std::error::Error;
 struct Args {
     #[command(subcommand)]
     command: Commands,
-
-    #[arg()]
-    file: String,
 }
 
 #[derive(Subcommand)]
@@ -19,33 +17,37 @@ enum Commands {
         /// column to sum up
         #[arg(short, long)]
         column: String,
-    },
-}
 
-#[derive(Debug)]
-pub enum Task {
-    SumDuration { column: String },
+        /// CSV input file
+        #[arg(short, long)]
+        infile: String,
+
+        /// CSV output file
+        #[arg(short, long)]
+        outfile: String,
+    },
 }
 
 impl From<Commands> for Task {
     fn from(cmd: Commands) -> Self {
         match cmd {
-            Commands::SumDuration { column: col } => Task::SumDuration { column: col },
+            Commands::SumDuration {
+                column,
+                infile,
+                outfile,
+            } => Task::SumDuration {
+                column,
+                infile: PathBuf::from(infile),
+                outfile: PathBuf::from(outfile),
+            },
         }
     }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let cli = Args::parse();
-    let data = parse_csv(cli.file)?;
     let task: Task = cli.command.into();
-    let result = dispatch(data, task);
+    let result = task.execute();
     println!("{:?}", result);
     Ok(())
-}
-
-pub fn dispatch(csv: CsvData, task: Task) -> CsvData {
-    match task {
-        Task::SumDuration { column: col } => sum_duration(csv, col).expect("failed"),
-    }
 }

@@ -1,9 +1,49 @@
+mod duration;
+
 use csv::Reader;
-use regex::Regex;
+use duration::DurationParser;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::iter;
+use std::path::PathBuf;
+
+#[derive(Debug)]
+pub enum Task {
+    SumDuration {
+        column: String,
+        infile: PathBuf,
+        outfile: PathBuf,
+    },
+}
+
+impl Task {
+    pub fn execute(&self) -> Result<(), ProcessingError> {
+        match self {
+            Task::SumDuration {
+                column: _c,
+                infile: _i,
+                outfile: _o,
+            } => Err(ProcessingError::NotImplemented),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ProcessingError {
+    FileAccess { path: String },
+    NotImplemented,
+    Other,
+}
+
+impl From<csv::Error> for ProcessingError {
+    fn from(err: csv::Error) -> Self {
+        println!("{:?}", err);
+        match err {
+            _ => ProcessingError::Other,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct CsvData {
@@ -29,15 +69,12 @@ pub fn parse_csv(path: String) -> Result<CsvData, Box<dyn Error>> {
     Ok(CsvData { rows: lines })
 }
 
-// TODO: re-consider parsing into data structure, becuase HashMap doesn't maintain the column
-// order. Consider using reader/writer with on-the-fly processing.
-pub fn sum_duration(csv: CsvData, sum_col: String) -> Option<CsvData> {
+pub fn sum_duration(sum_col: String, csv: CsvData) -> Option<CsvData> {
     let parser = DurationParser::new();
     let mut total_mins: usize = 0;
     let mut result = CsvData { rows: Vec::new() };
     for row in &csv.rows {
         if !row.contains_key(&sum_col) {
-            // TODO: report with Result Err
             eprintln!("missing column {sum_col} in row {row:?}");
             return None;
         }
@@ -62,54 +99,4 @@ pub fn sum_duration(csv: CsvData, sum_col: String) -> Option<CsvData> {
     }
     result.rows.push(sum_row);
     Some(result)
-}
-
-struct DurationParser {
-    pattern: Regex,
-}
-
-impl DurationParser {
-    fn new() -> Self {
-        let pattern = "([0-9]+):([0-9]+)";
-        let pattern = Regex::new(pattern).expect(&format!("invalid pattern: '{pattern}'"));
-        DurationParser { pattern }
-    }
-
-    fn parse_duration(&self, raw: &str) -> Option<(usize, usize)> {
-        let caps: Vec<_> = self
-            .pattern
-            .captures_iter(raw)
-            .map(|c| c.extract::<2>())
-            .map(|(_, hm)| hm)
-            .flatten()
-            .map(|x| x.parse::<usize>())
-            .map(|r| r.map_or(0, |v| v))
-            .collect();
-        let h = caps.get(0)?;
-        let m = caps.get(1)?;
-        Some((*h, *m))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_duration_parser() {
-        let tests = [
-            ("0:00", Some((0, 0))),
-            ("1:00", Some((1, 0))),
-            ("0:30", Some((0, 30))),
-            ("0:0", Some((0, 0))),
-            ("1.23", None),
-            ("0.00", None),
-        ];
-        let parser = DurationParser::new();
-
-        for (input, expected) in tests {
-            let actual = parser.parse_duration(input);
-            assert_eq!(actual, expected);
-        }
-    }
 }
