@@ -68,14 +68,22 @@ fn rewrite(infile: PathBuf, outfile: PathBuf) -> Result<(), ProcessingError> {
     Ok(())
 }
 
-fn sum_duration(infile: PathBuf, outfile: PathBuf, _column: String) -> Result<(), ProcessingError> {
+fn sum_duration(infile: PathBuf, outfile: PathBuf, column: String) -> Result<(), ProcessingError> {
     let mut reader = Reader::from_path(infile)?;
     let mut writer = Writer::from_path(outfile)?;
-    let headers = reader.headers()?;
-    writer.write_record(headers)?;
-    for record in reader.into_records() {
-        // TODO accumulate column as duration
+    let headers = reader.headers()?.clone();
+    writer.write_record(&headers)?;
+    for record in reader.records() {
         let record = record?;
+        let record_iter = record.iter().map(|s| s.to_string());
+        let header_iter = headers.iter().map(|s| s.to_string());
+        let row: HashMap<String, String> = header_iter.zip(record_iter).collect();
+        let duration = match row.get(&column) {
+            Some(c) => c,
+            None => "0",
+        };
+        println!("{duration}");
+
         writer.write_record(&record)?;
     }
     // TODO write summary column with duration
