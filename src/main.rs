@@ -13,6 +13,15 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Commands {
+    Rewrite {
+        /// CSV input file
+        #[arg(short, long)]
+        infile: String,
+
+        /// CSV output file
+        #[arg(short, long)]
+        outfile: String,
+    },
     SumDuration {
         /// column to sum up
         #[arg(short, long)]
@@ -31,6 +40,10 @@ enum Commands {
 impl From<Commands> for Task {
     fn from(cmd: Commands) -> Self {
         match cmd {
+            Commands::Rewrite { infile, outfile } => Task::Rewrite {
+                infile: PathBuf::from(infile),
+                outfile: PathBuf::from(outfile),
+            },
             Commands::SumDuration {
                 column,
                 infile,

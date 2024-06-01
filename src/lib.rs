@@ -1,33 +1,12 @@
 mod duration;
 
-use csv::Reader;
+use csv::{Reader, Writer};
 use duration::DurationParser;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::iter;
 use std::path::PathBuf;
-
-#[derive(Debug)]
-pub enum Task {
-    SumDuration {
-        column: String,
-        infile: PathBuf,
-        outfile: PathBuf,
-    },
-}
-
-impl Task {
-    pub fn execute(&self) -> Result<(), ProcessingError> {
-        match self {
-            Task::SumDuration {
-                column: _c,
-                infile: _i,
-                outfile: _o,
-            } => Err(ProcessingError::NotImplemented),
-        }
-    }
-}
 
 #[derive(Debug)]
 pub enum ProcessingError {
@@ -38,11 +17,69 @@ pub enum ProcessingError {
 
 impl From<csv::Error> for ProcessingError {
     fn from(err: csv::Error) -> Self {
-        println!("{:?}", err);
+        eprintln!("{:?}", err);
         match err {
             _ => ProcessingError::Other,
         }
     }
+}
+
+#[derive(Debug)]
+pub enum Task {
+    SumDuration {
+        column: String,
+        infile: PathBuf,
+        outfile: PathBuf,
+    },
+    Rewrite {
+        infile: PathBuf,
+        outfile: PathBuf,
+    },
+}
+
+impl Task {
+    pub fn execute(&self) -> Result<(), ProcessingError> {
+        match self {
+            Task::Rewrite { infile, outfile } => {
+                rewrite(infile.to_path_buf(), outfile.to_path_buf())
+            }
+            Task::SumDuration {
+                column,
+                infile,
+                outfile,
+            } => sum_duration(
+                infile.to_path_buf(),
+                outfile.to_path_buf(),
+                column.to_string(),
+            ),
+        }
+    }
+}
+
+fn rewrite(infile: PathBuf, outfile: PathBuf) -> Result<(), ProcessingError> {
+    let mut reader = Reader::from_path(infile)?;
+    let mut writer = Writer::from_path(outfile)?;
+    let headers = reader.headers()?;
+    writer.write_record(headers)?;
+    for record in reader.records() {
+        let record = record?;
+        writer.write_record(&record)?;
+    }
+    Ok(())
+}
+
+fn sum_duration(infile: PathBuf, outfile: PathBuf, _column: String) -> Result<(), ProcessingError> {
+    let mut reader = Reader::from_path(infile)?;
+    let mut writer = Writer::from_path(outfile)?;
+    let headers = reader.headers()?;
+    writer.write_record(headers)?;
+    for record in reader.into_records() {
+        // TODO accumulate column as duration
+        let record = record?;
+        writer.write_record(&record)?;
+    }
+    // TODO write summary column with duration
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -69,7 +106,7 @@ pub fn parse_csv(path: String) -> Result<CsvData, Box<dyn Error>> {
     Ok(CsvData { rows: lines })
 }
 
-pub fn sum_duration(sum_col: String, csv: CsvData) -> Option<CsvData> {
+pub fn sum_duration_deprecated(sum_col: String, csv: CsvData) -> Option<CsvData> {
     let parser = DurationParser::new();
     let mut total_mins: usize = 0;
     let mut result = CsvData { rows: Vec::new() };
@@ -86,7 +123,7 @@ pub fn sum_duration(sum_col: String, csv: CsvData) -> Option<CsvData> {
     }
     let h = total_mins / 60;
     let m = total_mins - h * 60;
-    let cols = csv.rows.get(0)?.keys();
+    let cols = csv.rows.first()?.keys();
     let mut sum_row: HashMap<String, String> = HashMap::new();
     for col in cols {
         sum_row.insert(

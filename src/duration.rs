@@ -7,7 +7,8 @@ pub struct DurationParser {
 impl DurationParser {
     pub fn new() -> Self {
         let pattern = "([0-9]+):([0-9]+)";
-        let pattern = Regex::new(pattern).expect(&format!("invalid pattern: '{pattern}'"));
+        let pattern =
+            Regex::new(pattern).unwrap_or_else(|_| panic!("invalid pattern: '{pattern}'"));
         DurationParser { pattern }
     }
 
@@ -16,12 +17,11 @@ impl DurationParser {
             .pattern
             .captures_iter(raw)
             .map(|c| c.extract::<2>())
-            .map(|(_, hm)| hm)
-            .flatten()
+            .flat_map(|(_, hm)| hm)
             .map(|x| x.parse::<usize>())
             .map(|r| r.map_or(0, |v| v))
             .collect();
-        let h = caps.get(0)?;
+        let h = caps.first()?;
         let m = caps.get(1)?;
         Some((*h, *m))
     }
