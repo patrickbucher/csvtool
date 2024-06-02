@@ -1,6 +1,5 @@
 use clap::{Parser, Subcommand};
 use csvtool::Task;
-use std::error::Error;
 use std::path::PathBuf;
 
 /// Operations on CSV files.
@@ -57,10 +56,10 @@ impl From<Commands> for Task {
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() {
     let cli = Args::parse();
     let task: Task = cli.command.into();
-    let result = task.execute();
-    println!("{:?}", result);
-    Ok(())
+    if let Err(e) = task.execute() {
+        eprintln!("error: {e}");
+    }
 }

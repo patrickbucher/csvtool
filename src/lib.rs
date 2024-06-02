@@ -4,6 +4,8 @@ use csv::{Reader, Writer};
 use duration::DurationParser;
 use std::collections::HashMap;
 use std::error::Error;
+use std::fmt;
+use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::iter;
 use std::path::PathBuf;
@@ -11,16 +13,25 @@ use std::path::PathBuf;
 #[derive(Debug)]
 pub enum ProcessingError {
     FileAccess { path: String },
-    NotImplemented,
-    Other,
+    Parsing { cause: String },
+    // TODO: enhance
+    CsvError,
+}
+
+impl Display for ProcessingError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            ProcessingError::FileAccess { path: p } => write!(f, "unable to access file {p}"),
+            ProcessingError::Parsing { cause: c } => write!(f, "{c}"),
+            ProcessingError::CsvError => write!(f, "unable to process CSV file"),
+        }
+    }
 }
 
 impl From<csv::Error> for ProcessingError {
-    fn from(err: csv::Error) -> Self {
-        eprintln!("{:?}", err);
-        match err {
-            _ => ProcessingError::Other,
-        }
+    fn from(_err: csv::Error) -> Self {
+        // TODO: differentiate between different error causes
+        ProcessingError::CsvError
     }
 }
 
@@ -73,20 +84,33 @@ fn sum_duration(infile: PathBuf, outfile: PathBuf, column: String) -> Result<(),
     let mut writer = Writer::from_path(outfile)?;
     let headers = reader.headers()?.clone();
     writer.write_record(&headers)?;
+    let mut durations: Vec<(usize, usize)> = Vec::new();
+    let parser = DurationParser::new();
     for record in reader.records() {
         let record = record?;
         let record_iter = record.iter().map(|s| s.to_string());
         let header_iter = headers.iter().map(|s| s.to_string());
         let row: HashMap<String, String> = header_iter.zip(record_iter).collect();
-        let duration = match row.get(&column) {
-            Some(c) => c,
-            None => "0",
-        };
-        println!("{duration}");
-
+        if let Some(duration) = row.get(&column) {
+            match parser.parse_duration(duration) {
+                Some(duration) => durations.push(duration),
+                None => {
+                    return Err(ProcessingError::Parsing {
+                        cause: format!("parse '{duration}' as duration"),
+                    })
+                }
+            }
+        }
         writer.write_record(&record)?;
     }
-    // TODO write summary column with duration
+    let total_mins = durations.iter().fold(0, |acc, (h, m)| acc + h * 60 + m);
+    let hours = total_mins / 60;
+    let minutes = total_mins - hours * 60;
+    let total = format!("{hours}:{minutes:2}");
+    writer.write_record(headers.iter().map(|h| match h == column {
+        true => &total,
+        false => "",
+    }))?;
     Ok(())
 }
 
