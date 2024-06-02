@@ -6,4 +6,4 @@ A tool to deal with CSV files.
 
 Sums up columns of the form `hh:mm`.
 
-    csvtool example.csv sum-duration --column Effort
+    csvtool sum-duration --infile example.csv --outfile result.csv --column Effort
