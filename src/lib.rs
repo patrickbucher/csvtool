@@ -28,6 +28,7 @@ impl Display for ProcessingError {
 impl From<csv::Error> for ProcessingError {
     fn from(_err: csv::Error) -> Self {
         // TODO: differentiate between different error causes
+        // for CSV errors, reporting the failing line would be useful
         ProcessingError::CsvError
     }
 }
