@@ -104,7 +104,7 @@ fn sum_duration(infile: PathBuf, outfile: PathBuf, column: String) -> Result<(),
     let total_mins = durations.iter().fold(0, |acc, (h, m)| acc + h * 60 + m);
     let hours = total_mins / 60;
     let minutes = total_mins - hours * 60;
-    let total = format!("{hours}:{minutes:2}");
+    let total = format!("{hours}:{minutes:02}");
     writer.write_record(headers.iter().map(|h| match h == column {
         true => &total,
         false => "",
