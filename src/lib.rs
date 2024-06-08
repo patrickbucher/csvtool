@@ -59,24 +59,28 @@ impl Task {
             } => rewrite_with_accumulator(
                 infile.to_path_buf(),
                 outfile.to_path_buf(),
-                extract_column
+                extract_column(column, String::from("0:00")),
             ),
         }
     }
 }
 
-// TODO: extract_column should accept column/fallback and return a function to extract those
-fn extract_column(headers: StringRecord, record: StringRecord, column: &str, fallback: String) -> String {
-    let record_iter = record.iter().map(|s| s.trim().to_string());
-    let header_iter = headers.iter().map(|s| s.trim().to_string());
-    let row: HashMap<String, String> = header_iter.zip(record_iter).collect();
-    row.get(column).unwrap_or(&fallback).to_string()
+fn extract_column(
+    column: &str,
+    fallback: String,
+) -> impl Fn(StringRecord, StringRecord) -> String + '_ {
+    move |headers: StringRecord, record: StringRecord| {
+        let record_iter = record.iter().map(|s| s.trim().to_string());
+        let header_iter = headers.iter().map(|s| s.trim().to_string());
+        let row: HashMap<String, String> = header_iter.zip(record_iter).collect();
+        row.get(column).unwrap_or(&fallback).to_string()
+    }
 }
 
 fn rewrite_with_accumulator(
     infile: PathBuf,
     outfile: PathBuf,
-    acc: fn(StringRecord, StringRecord, &str, String) -> String,
+    extractor: impl Fn(StringRecord, StringRecord) -> String,
 ) -> Result<(), ProcessingError> {
     let mut reader = Reader::from_path(infile)?;
     let mut writer = Writer::from_path(outfile)?;
@@ -85,6 +89,8 @@ fn rewrite_with_accumulator(
     for record in reader.records() {
         let record: StringRecord = record?.iter().map(|s| s.trim()).collect();
         writer.write_record(&record)?;
+        let value = extractor(headers.clone(), record);
+        println!("{value}");
     }
     Ok(())
 }
