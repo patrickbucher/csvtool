@@ -59,40 +59,15 @@ impl Task {
             } => rewrite_with_accumulator(
                 infile.to_path_buf(),
                 outfile.to_path_buf(),
+                column.into(),
                 extract_column(column, String::from("0:00")),
+                // TODO: consider passing colum to sum_durations(), then move the code to produce
+                // the sum line into the closure returned by sum_durations, which then also needs
+                // the headers.
+                sum_durations(),
             ),
         }
     }
-}
-
-fn extract_column(
-    column: &str,
-    fallback: String,
-) -> impl Fn(StringRecord, StringRecord) -> String + '_ {
-    move |headers: StringRecord, record: StringRecord| {
-        let record_iter = record.iter().map(|s| s.trim().to_string());
-        let header_iter = headers.iter().map(|s| s.trim().to_string());
-        let row: HashMap<String, String> = header_iter.zip(record_iter).collect();
-        row.get(column).unwrap_or(&fallback).to_string()
-    }
-}
-
-fn rewrite_with_accumulator(
-    infile: PathBuf,
-    outfile: PathBuf,
-    extractor: impl Fn(StringRecord, StringRecord) -> String,
-) -> Result<(), ProcessingError> {
-    let mut reader = Reader::from_path(infile)?;
-    let mut writer = Writer::from_path(outfile)?;
-    let headers: StringRecord = reader.headers()?.iter().map(|s| s.trim()).collect();
-    writer.write_record(&headers)?;
-    for record in reader.records() {
-        let record: StringRecord = record?.iter().map(|s| s.trim()).collect();
-        writer.write_record(&record)?;
-        let value = extractor(headers.clone(), record);
-        println!("{value}");
-    }
-    Ok(())
 }
 
 fn rewrite(infile: PathBuf, outfile: PathBuf) -> Result<(), ProcessingError> {
@@ -107,37 +82,55 @@ fn rewrite(infile: PathBuf, outfile: PathBuf) -> Result<(), ProcessingError> {
     Ok(())
 }
 
-fn sum_duration(infile: PathBuf, outfile: PathBuf, column: String) -> Result<(), ProcessingError> {
+fn rewrite_with_accumulator(
+    infile: PathBuf,
+    outfile: PathBuf,
+    column: String,
+    extractor: impl Fn(StringRecord, StringRecord) -> String,
+    accumulator: impl Fn(&Vec<String>) -> String,
+) -> Result<(), ProcessingError> {
     let mut reader = Reader::from_path(infile)?;
     let mut writer = Writer::from_path(outfile)?;
-    let headers = reader.headers()?.clone();
+    let headers: StringRecord = reader.headers()?.iter().map(|s| s.trim()).collect();
     writer.write_record(&headers)?;
-    let mut durations: Vec<(usize, usize)> = Vec::new();
-    let parser = DurationParser::new();
+    let mut collection: Vec<String> = Vec::new();
     for record in reader.records() {
         let record: StringRecord = record?.iter().map(|s| s.trim()).collect();
-        let record_iter = record.iter().map(|s| s.trim().to_string());
-        let header_iter = headers.iter().map(|s| s.trim().to_string());
-        let row: HashMap<String, String> = header_iter.zip(record_iter).collect();
-        if let Some(duration) = row.get(&column) {
-            match parser.parse_duration(duration) {
-                Some(duration) => durations.push(duration),
-                None => {
-                    return Err(ProcessingError::Parsing {
-                        cause: format!("parse '{duration}' as duration"),
-                    })
-                }
-            }
-        }
         writer.write_record(&record)?;
+        let value = extractor(headers.clone(), record);
+        collection.push(value);
     }
-    let total_mins = durations.iter().fold(0, |acc, (h, m)| acc + h * 60 + m);
-    let hours = total_mins / 60;
-    let minutes = total_mins - hours * 60;
-    let total = format!("{hours}:{minutes:02}");
+    let total = accumulator(&collection);
     writer.write_record(headers.iter().map(|h| match h == column {
         true => &total,
         false => "",
     }))?;
     Ok(())
+}
+
+fn extract_column(
+    column: &str,
+    fallback: String,
+) -> impl Fn(StringRecord, StringRecord) -> String + '_ {
+    move |headers: StringRecord, record: StringRecord| {
+        let record_iter = record.iter().map(|s| s.trim().to_string());
+        let header_iter = headers.iter().map(|s| s.trim().to_string());
+        let row: HashMap<String, String> = header_iter.zip(record_iter).collect();
+        row.get(column).unwrap_or(&fallback).to_string()
+    }
+}
+
+// TODO: return Result instead of falling back to 0:00 in the case of an error.
+fn sum_durations() -> impl Fn(&Vec<String>) -> String {
+    let parser = DurationParser::new();
+    move |durations: &Vec<String>| {
+        let minutes = durations
+            .iter()
+            .map(|d| parser.parse_duration(d))
+            .map(|d| d.unwrap_or((0, 0)))
+            .fold(0, |acc: usize, (h, m)| acc + 60 * h + m);
+        let hours = minutes / 60;
+        let minutes = minutes - hours * 60;
+        format!("{hours}:{minutes:02}")
+    }
 }
